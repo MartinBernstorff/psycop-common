@@ -2,6 +2,23 @@
 
 <!--next-version-placeholder-->
 
+## v0.94.0 (2023-08-03)
+
+### Feature
+
+* Multilabel classification ([`5285b2c`](https://github.com/Aarhus-Psychiatry-Research/psycop-common/commit/5285b2c00f63a74cb19b6051903fd85a0df75773))
+
+## v0.93.0 (2023-07-20)
+
+### Feature
+
+* Simple qc of text ([`eff9bfa`](https://github.com/Aarhus-Psychiatry-Research/psycop-common/commit/eff9bfa673cd0955797531d366df76dd783511fa))
+
+### Fix
+
+* Misc minor changes to qc ([`efc45e0`](https://github.com/Aarhus-Psychiatry-Research/psycop-common/commit/efc45e082bab5d7c02e3cc9f5da0daed64b30cb1))
+* Working qc ([`add0333`](https://github.com/Aarhus-Psychiatry-Research/psycop-common/commit/add03330109e1eee94ef825e6e8a3b6d2a1a272c))
+
 ## v0.92.0 (2023-07-18)
 
 ### Feature

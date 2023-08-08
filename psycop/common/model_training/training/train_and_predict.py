@@ -5,7 +5,7 @@ from typing import Any, Optional, Union
 import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
-from sklearn.model_selection import GroupKFold, StratifiedGroupKFold
+from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.multioutput import MultiOutputClassifier
 from sklearn.pipeline import Pipeline
 from wasabi import Printer
@@ -15,6 +15,7 @@ from psycop.common.model_training.config_schemas.full_config import FullConfigSc
 from psycop.common.model_training.training.model_specs import MODELS
 from psycop.common.model_training.training.utils import create_eval_dataset
 from psycop.common.model_training.training_output.dataclasses import EvalDataset
+from psycop.common.model_training.utils.utils import SUPPORTS_MULTILABEL_CLASSIFICATION
 
 CONFIG_PATH = PSYCOP_PKG_ROOT / "application" / "config"
 
@@ -33,7 +34,7 @@ def create_model(cfg: FullConfigSchema) -> Any:
     training_arguments = cfg.model.args
     model_args.update(training_arguments)
 
-    if cfg.preprocessing.pre_split.keep_only_one_outcome_col is False:
+    if cfg.preprocessing.pre_split.classification_objective == "multilabel":
         return MultiOutputClassifier(model_dict["model"](**model_args))
 
     return model_dict["model"](**model_args)
@@ -100,6 +101,11 @@ def multilabel_cross_validation(
     outcome_col_name: list[str],
 ) -> pd.DataFrame:
     """Performs stratified and grouped cross validation using the pipeline."""
+    if cfg.model.name not in SUPPORTS_MULTILABEL_CLASSIFICATION:
+        raise ValueError(
+            f"{cfg.model.name} does not support multilabel classification. Models that support multilabel classification include: {SUPPORTS_MULTILABEL_CLASSIFICATION}.",
+        )
+
     msg = Printer(timestamp=True)
 
     X = train_df[train_col_names]
@@ -109,10 +115,18 @@ def multilabel_cross_validation(
     msg.info("Creating folds")
     msg.info(f"Training on {X.shape[1]} columns and {X.shape[0]} rows")
 
-    folds = GroupKFold(n_splits=cfg.n_crossval_splits).split(
+    # StratifiedGroupKFold does not support stratification across multiple labels, so we create a concatenated label that represents all individual labels
+    y_joined = y.astype(int).astype(str).apply("".join, axis=1)
+
+    # stratify by first outcome column
+    folds = StratifiedGroupKFold(n_splits=cfg.n_crossval_splits).split(
         X=X,
-        y=y,
+        y=y_joined,
         groups=train_df[cfg.data.col_name.id],
+    )
+
+    msg.info(
+        f"Stratifying by {y[outcome_col_name[0]]}",  # type: ignore
     )
 
     # Perform CV and get out of fold predictions
@@ -133,13 +147,13 @@ def multilabel_cross_validation(
         y_pred = pipe.predict_proba(X_train)
 
         msg.info(
-            f"{msg_prefix}: Train AUC = {round(roc_auc_score(y_train, np.asarray([y_pred[x][:,1] for x in range(0, len(y_pred))]).T), 3)}",
+            f"{msg_prefix}: Train AUC = {round(roc_auc_score(y_train, np.asarray([y_pred[x][:,1] for x in range(0, len(y_pred))]).T), 3)}",  # type: ignore
         )
 
         oof_y_pred = pipe.predict_proba(X.loc[val_idxs])
 
         msg.info(
-            f"{msg_prefix}: Oof AUC = {round(roc_auc_score(y.loc[val_idxs], np.asarray([oof_y_pred[x][:,1] for x in range(0, len(oof_y_pred))]).T), 3)}",
+            f"{msg_prefix}: Oof AUC = {round(roc_auc_score(y.loc[val_idxs], np.asarray([oof_y_pred[x][:,1] for x in range(0, len(oof_y_pred))]).T), 3)}",  # type: ignore
         )
 
         train_df.loc[
@@ -301,7 +315,7 @@ def multilabel_train_validate(
     y_val_hat_prob = pipe.predict_proba(X_val)
 
     print(
-        f"Performance on train: {round(roc_auc_score(y_train, np.asarray([y_train_hat_prob[x][:,1] for x in range(0, len(y_train_hat_prob))]).T), 3)}",
+        f"Performance on train: {round(roc_auc_score(y_train, np.asarray([y_train_hat_prob[x][:,1] for x in range(0, len(y_train_hat_prob))]).T), 3)}",  # type: ignore
     )
 
     df = val
@@ -344,14 +358,14 @@ def train_and_predict(
     if cfg.model.name in ("ebm", "xgboost"):
         pipe["model"].feature_names = train_col_names  # type: ignore
 
-    if isinstance(outcome_col_name, str):
+    if cfg.preprocessing.pre_split.classification_objective == "binary":
         if val_datasets is not None:  # train on pre-defined splits
             eval_dataset = train_validate(
                 cfg=cfg,
                 train=train_datasets,
                 val=val_datasets,
                 pipe=pipe,
-                outcome_col_name=outcome_col_name,
+                outcome_col_name=outcome_col_name,  # type: ignore
                 train_col_names=train_col_names,
             )
         else:
@@ -359,18 +373,18 @@ def train_and_predict(
                 cfg=cfg,
                 train=train_datasets,
                 pipe=pipe,
-                outcome_col_name=outcome_col_name,
+                outcome_col_name=outcome_col_name,  # type: ignore
                 train_col_names=train_col_names,
             )
 
-    else:
+    elif cfg.preprocessing.pre_split.classification_objective == "multilabel":
         if val_datasets is not None:
             eval_dataset = multilabel_train_validate(
                 cfg=cfg,
                 train=train_datasets,
                 val=val_datasets,
                 pipe=pipe,
-                outcome_col_name=outcome_col_name,
+                outcome_col_name=outcome_col_name,  # type: ignore
                 train_col_names=train_col_names,
             )
         else:
@@ -378,8 +392,8 @@ def train_and_predict(
                 cfg=cfg,
                 train=train_datasets,
                 pipe=pipe,
-                outcome_col_name=outcome_col_name,
+                outcome_col_name=outcome_col_name,  # type: ignore
                 train_col_names=train_col_names,
             )
 
-    return eval_dataset
+    return eval_dataset  # type: ignore
