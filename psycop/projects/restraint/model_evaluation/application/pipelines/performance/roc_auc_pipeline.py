@@ -8,12 +8,10 @@ from psycop.common.model_evaluation.binary.global_performance.roc_auc import (
     bootstrap_roc,
 )
 from psycop.projects.restraint.model_evaluation.config import (
-    EVAL_RUN,
+    BEST_DEV_RUN,
     FIGURES_PATH,
     MODEL_NAME,
     PN_THEME,
-    TEXT_EVAL_RUN,
-    TEXT_FIGURES_PATH,
 )
 from psycop.projects.restraint.utils.best_runs import Run
 
@@ -94,15 +92,15 @@ def plot_auc_roc(
 def roc_auc_pipeline(run: Run, path: Path):
     eval_ds = run.get_eval_dataset()
 
-    if isinstance(eval_ds.y, pd.DataFrame) or isinstance(
-        eval_ds.y_hat_probs,
-        pd.DataFrame,
-    ):
-        raise TypeError
+    # if isinstance(eval_ds.y, pd.DataFrame) or isinstance(
+    #     eval_ds.y_hat_probs,
+    #     pd.DataFrame,
+    # ):
+    #     raise TypeError
 
     tprs_bootstrapped, aucs_bootstrapped, base_fpr = bootstrap_results(
-        y=eval_ds.y,
-        y_hat_probs=eval_ds.y_hat_probs,
+        y=eval_ds["outcome_coercion_type_within_2_days"].replace({1: 0, 2: 0, 3: 1}),
+        y_hat_probs=eval_ds["y_hat_prob"],
     )
 
     # Calculate confidence interval for AUC
@@ -116,12 +114,12 @@ def roc_auc_pipeline(run: Run, path: Path):
         tprs_bootstrapped=tprs_bootstrapped,
         aucs_bootstrapped=aucs_bootstrapped,
         base_fpr=base_fpr,
-        title=f"AUROC for {MODEL_NAME[run.name]}",
+        title=f"AUROC",
     )
 
     auc.save(path / "roc_auc.png", dpi=300)
 
 
 if __name__ == "__main__":
-    roc_auc_pipeline(EVAL_RUN, FIGURES_PATH)
-    roc_auc_pipeline(TEXT_EVAL_RUN, TEXT_FIGURES_PATH)
+    roc_auc_pipeline(BEST_DEV_RUN, FIGURES_PATH)
+    # roc_auc_pipeline(TEXT_EVAL_RUN, TEXT_FIGURES_PATH)
